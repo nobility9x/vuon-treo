@@ -255,7 +255,7 @@ function layout(){
   put('btnX', W-108, H-252);                                    // kim cương phải: X trên
   put('btnY', W-182, H-182);                                    // Y trái
   put('btnA', W-104, H-104);                                    // A dưới
-  put('btnB', W-34,  H-182);                                    // B phải
+  put('btnB', W-92,  H-182);                                    // B phải (trái = mép phải - 92 để nút 56px nằm trọn trong khung)
 }
 window.addEventListener('resize',layout);
 /* ================= THẾ GIỚI — 4 vùng vườn treo (bản đồ tự thiết kế) ================= */
@@ -982,7 +982,15 @@ function drawPlayerAt(g,t,p){
 }
 
 /* ================= LUỒNG GAME ================= */
+function goFullscreen(){
+  try{
+    const el=document.documentElement;
+    if(!document.fullscreenElement&&el.requestFullscreen)el.requestFullscreen().catch(()=>{});
+    if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
+  }catch(e){}
+}
 function startGame(){
+  goFullscreen();
   ac(); startMusic();
   G.state='play'; G.time=0; G.kills=0; G.deaths=0; G.playSecs=0; G.dew=0; G.heartTaken=false; G.won=false;
   player.maxhp=5; player.hp=5; player.silk=0; player.dead=false; player.invT=0;
