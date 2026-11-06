@@ -27,6 +27,12 @@
   #roomName { position:absolute; top:12px; left:50%; transform:translateX(-50%); color:#eaf7e2; font-size:19px; font-weight:800; letter-spacing:3px; text-shadow:0 2px 8px rgba(0,0,0,.8); opacity:0; transition:opacity .5s; z-index:5; pointer-events:none; text-align:center; white-space:nowrap; }
   #toast { position:absolute; left:50%; bottom:118px; transform:translateX(-50%); max-width:82%; background:rgba(8,24,15,.88); border:1.5px solid rgba(190,240,190,.5); color:#eaffea; padding:9px 16px; border-radius:12px; font-size:15.5px; line-height:1.45; text-align:center; opacity:0; transition:opacity .3s; z-index:6; pointer-events:none; }
   #dmgFlash { position:absolute; inset:0; background:radial-gradient(100% 100% at 50% 50%, transparent 55%, rgba(200,20,10,.5)); opacity:0; z-index:4; pointer-events:none; }
+  #uiLayer { position:fixed; inset:0; z-index:6; pointer-events:none; }
+  #uiLayer .tbtn, #btnPause { pointer-events:auto; }
+  #touchZone { position:fixed; left:0; top:0; width:46%; height:100%; z-index:5; display:none; touch-action:none; }
+  body.playing.touch-on #touchZone { display:block; }
+  #hud { transform-origin:top left; }
+  #btnPause { transform-origin:top right; }
   #fade { position:absolute; inset:0; background:#04120a; opacity:0; z-index:7; pointer-events:none; transition:opacity .28s; }
 
   /* ===== Touch controls — bố cục như ảnh chụp: cần trái, L/ZL trái, cụm kim cương X/Y/A/B phải ===== */
@@ -116,7 +122,8 @@
 <script>
 'use strict';
 /* ================= VƯỜN TREO v1.0 — game tự viết mới hoàn toàn ================= */
-const VW=960, VH=540;
+let VW=960; const VH=540;
+(function(){ const a=window.innerWidth/Math.max(1,window.innerHeight); if(a>1.78) VW=Math.round(Math.min(1240,540*a)); })();
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
@@ -210,26 +217,34 @@ function bindBtn(id,name){
 }
 bindBtn('btnA','jump'); bindBtn('btnX','attack'); bindBtn('btnB','dash');
 bindBtn('btnZL','spear'); bindBtn('btnL','heal'); bindBtn('btnY','act');
-/* Cần gạt ảo bên trái (như ảnh chụp) */
+/* Lớp giao diện bám MÀN HÌNH THẬT: nút + cần gạt + HUD chuyển ra khỏi sân khấu 16:9,
+   neo vào góc máy như game native — hết cảnh nút lơ lửng giữa màn trên máy màn rộng */
+const uiLayer=document.createElement('div'); uiLayer.id='uiLayer'; document.body.appendChild(uiLayer);
+['hud','roomName','btnPause','toast','stickBase','stickKnob','btnL','btnZL','btnX','btnY','btnA','btnB'].forEach(id=>{ const n=$(id); if(n)uiLayer.appendChild(n); });
+const touchZone=document.createElement('div'); touchZone.id='touchZone'; document.body.appendChild(touchZone);
+
+/* Cần gạt ảo động bên trái — toạ độ pixel màn hình thật, vòng bám đúng ngón tay */
 const stick={active:false,id:-1,cx:0,cy:0,dx:0,dy:0};
-function stagePos(e){ const r=$('stage').getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top,w:r.width,h:r.height}; }
-$('stage').addEventListener('pointerdown',e=>{
-  if(e.target.closest('.tbtn')||e.target.closest('.overlay')||e.target.id==='btnPause')return;
-  const p=stagePos(e);
-  if(p.x<p.w*0.45&&stick.id===-1){
-    stick.active=true; stick.id=e.pointerId; stick.cx=p.x; stick.cy=p.y; stick.dx=0; stick.dy=0;
-    const b=$('stickBase'),k=$('stickKnob');
-    b.style.display=k.style.display='block';
-    b.style.left=(p.x-59)+'px'; b.style.top=(p.y-59)+'px';
-    k.style.left=(p.x-26)+'px'; k.style.top=(p.y-26)+'px';
-  }
+function stickDraw(dx,dy){
+  $('stickBase').style.left=(stick.cx-59)+'px'; $('stickBase').style.top=(stick.cy-59)+'px';
+  $('stickKnob').style.left=(stick.cx+dx-26)+'px'; $('stickKnob').style.top=(stick.cy+dy-26)+'px';
+}
+touchZone.addEventListener('pointerdown',e=>{
+  if(G.state!=='play'||stick.id!==-1)return;
+  stick.active=true; stick.id=e.pointerId;
+  try{ touchZone.setPointerCapture(stick.id); }catch(err){}
+  stick.cx=Math.max(60,Math.min(window.innerWidth*0.45-16,e.clientX));
+  stick.cy=Math.max(66,Math.min(window.innerHeight-60,e.clientY));
+  stick.dx=0; stick.dy=0;
+  $('stickBase').style.display='block'; $('stickKnob').style.display='block';
+  stickDraw(0,0);
 });
-window.addEventListener('pointermove',e=>{
+touchZone.addEventListener('pointermove',e=>{
   if(!stick.active||e.pointerId!==stick.id)return;
-  const p=stagePos(e); let dx=p.x-stick.cx, dy=p.y-stick.cy;
+  let dx=e.clientX-stick.cx, dy=e.clientY-stick.cy;
   const d=Math.hypot(dx,dy),max=44; if(d>max){ dx*=max/d; dy*=max/d; }
   stick.dx=dx/max; stick.dy=dy/max;
-  const k=$('stickKnob'); k.style.left=(stick.cx+dx-26)+'px'; k.style.top=(stick.cy+dy-26)+'px';
+  stickDraw(dx,dy);
   keys.left = stick.dx<-0.35?1:0; keys.right = stick.dx>0.35?1:0;
   keys.down = stick.dy>0.55?1:0; keys.up = stick.dy<-0.55?1:0;
 });
@@ -239,23 +254,33 @@ function stickEnd(e){
   keys.left=keys.right=keys.up=keys.down=0;
   $('stickBase').style.display='none'; $('stickKnob').style.display='none';
 }
-window.addEventListener('pointerup',stickEnd);
-window.addEventListener('pointercancel',stickEnd);
+touchZone.addEventListener('pointerup',stickEnd);
+touchZone.addEventListener('pointercancel',stickEnd);
 $('btnPause').addEventListener('pointerdown',e=>{ e.preventDefault(); togglePause(); });
 
-/* Co giãn sân khấu + bố trí nút đúng bố cục ảnh chụp */
+/* Co giãn sân khấu (chỉ còn canvas) + bố trí nút bám góc MÀN HÌNH THẬT */
 function layout(){
   const vw=window.innerWidth, vh=window.innerHeight;
   const s=Math.min(vw/VW, vh/VH);
   const st=$('stage'); st.style.width=VW+'px'; st.style.height=VH+'px';
   st.style.transform='scale('+s+')'; st.style.transformOrigin='center center';
-  const W=VW,H=VH;
-  const put=(id,x,y)=>{ const el=$(id); el.style.left=x+'px'; el.style.top=y+'px'; };
-  put('btnZL', 118, H-238); put('btnL', 34, H-238);           // cụm trái: L / ZL
-  put('btnX', W-108, H-252);                                    // kim cương phải: X trên
-  put('btnY', W-182, H-182);                                    // Y trái
-  put('btnA', W-104, H-104);                                    // A dưới
-  put('btnB', W-92,  H-182);                                    // B phải (trái = mép phải - 92 để nút 56px nằm trọn trong khung)
+  const hs=Math.max(0.95, Math.min(1.6, vh/540));
+  $('hud').style.transform='scale('+hs+')';
+  $('btnPause').style.transform='scale('+hs+')';
+  $('roomName').style.fontSize=(17*hs)+'px';
+  $('toast').style.fontSize=(15.5*hs)+'px';
+  const u=Math.max(52, Math.min(96, vh*0.148));            // cỡ nút tỉ lệ theo chiều cao máy
+  const setC=(id,cx,cy,sz)=>{ const b=$(id);
+    b.style.left=(cx-sz/2)+'px'; b.style.top=(cy-sz/2)+'px';
+    b.style.width=sz+'px'; b.style.height=sz+'px'; b.style.fontSize=(sz*0.34)+'px';
+    const sm=b.querySelector('small'); if(sm)sm.style.fontSize=(sz*0.155)+'px'; };
+  const dcx=vw-u*1.80, dcy=vh-u*1.88;                       // tâm cụm kim cương: góc phải-dưới của máy
+  setC('btnX', dcx, dcy-u*1.16, u);                         // X trên
+  setC('btnB', dcx+u*1.16, dcy, u*0.92);                    // B phải
+  setC('btnA', dcx, dcy+u*1.16, u*1.05);                    // A dưới
+  setC('btnY', dcx-u*1.16, dcy, u*0.92);                    // Y trái
+  setC('btnL',  u*0.92, vh-u*1.02, u*0.96);                 // cụm trái: L / ZL sát góc trái-dưới
+  setC('btnZL', u*2.10, vh-u*1.02, u*0.96);
 }
 window.addEventListener('resize',layout);
 /* ================= THẾ GIỚI — 4 vùng vườn treo (bản đồ tự thiết kế) ================= */
